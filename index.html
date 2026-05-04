@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IoT Terminal — Kelompok 6</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: LOGIN
+═══════════════════════════════════════════════════════════ -->
+<div id="view-login">
+  <nav class="nav">
+    <div class="brand">⚡ ESP32 IoT Terminal</div>
+    <div class="badge-ready"><span class="dot-g"></span> SISTEM SIAP</div>
+  </nav>
+
+  <div class="container" style="max-width:520px">
+
+    <div class="card" style="text-align:center;padding:28px 20px 20px">
+      <div style="font-size:2.2rem;margin-bottom:10px">⚡</div>
+      <div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--accent);letter-spacing:4px">IoT TERMINAL</div>
+      <div class="dim" style="margin-top:6px;font-size:0.7rem;letter-spacing:1.5px">Suhu &nbsp;·&nbsp; Kelembapan &nbsp;·&nbsp; Pencahayaan</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Informasi Proyek</div>
+      <div class="tbl-wrap" style="max-height:none">
+        <table>
+          <tbody>
+            <tr>
+              <td style="color:var(--accent);opacity:.7;font-size:.62rem;letter-spacing:1px;white-space:nowrap">👤 Nama Guru</td>
+              <td style="color:var(--text);font-weight:600">Dinar Kurniawan</td>
+            </tr>
+            <tr>
+              <td style="color:var(--accent);opacity:.7;font-size:.62rem;letter-spacing:1px;white-space:nowrap">🎓 Kelas</td>
+              <td style="color:var(--text);font-weight:600">XII SIJA B</td>
+            </tr>
+            <tr>
+              <td style="color:var(--accent);opacity:.7;font-size:.62rem;letter-spacing:1px;white-space:nowrap">👥 Kelompok</td>
+              <td style="font-weight:600"><span class="bt" style="font-size:.65rem">// KELOMPOK 6 //</span></td>
+            </tr>
+            <tr>
+              <td style="color:var(--accent);opacity:.7;font-size:.62rem;letter-spacing:1px;white-space:nowrap">📡 Proyek</td>
+              <td style="color:var(--text);font-weight:600">IoT Sensor Monitor</td>
+            </tr>
+            <tr>
+              <td style="color:var(--accent);opacity:.7;font-size:.62rem;letter-spacing:1px;white-space:nowrap">🔌 Broker</td>
+              <td style="color:var(--text);font-weight:600">HiveMQ Cloud</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <button onclick="goToDashboard()"
+      style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+             padding:14px;background:transparent;border:1px solid var(--accent);
+             color:var(--accent);font-family:var(--mono);font-size:.72rem;
+             letter-spacing:3px;font-weight:500;border-radius:8px;cursor:pointer;transition:all .25s;"
+      onmouseover="this.style.background='var(--accent)';this.style.color='var(--bg)';this.style.boxShadow='0 0 24px rgba(14,165,233,.25)'"
+      onmouseout="this.style.background='transparent';this.style.color='var(--accent)';this.style.boxShadow='none'">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+        <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      MASUK KE DASHBOARD
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: DASHBOARD
+═══════════════════════════════════════════════════════════ -->
+<div id="view-dashboard" class="hidden">
+  <nav class="nav">
+    <div class="brand">⚡ ESP32 IoT Terminal </div>
+    <button class="nav-back" onclick="goToLogin()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <path d="M13 8H3M7 4l-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>KEMBALI
+    </button>
+    <div id="badge" class="badge"><span id="dot"></span><span id="btext">DISCONNECTED</span></div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Status + LDR -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="label">Status Sistem</div>
+        <div class="status-row">
+          <span id="sval" class="big-text">STANDBY</span>
+          <span id="snote" class="dim">Menunggu data dari ESP32...</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">Cahaya — LDR</div>
+        <div class="ldr-row">
+          <span id="lico" class="ldr-icon">💡</span>
+          <span id="lpill" class="pill">MENUNGGU</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sensor -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="label">Suhu — DHT11</div>
+        <div class="sensor-row">
+          <span id="sv" class="num">--</span><span class="unit">°C</span>
+        </div>
+        <div class="bar"><div class="bar-fill" id="sb"></div></div>
+      </div>
+      <div class="card">
+        <div class="label">Kelembapan — DHT11</div>
+        <div class="sensor-row">
+          <span id="hv" class="num">--</span><span class="unit">%</span>
+        </div>
+        <div class="bar"><div class="bar-fill bar-hum" id="hb"></div></div>
+      </div>
+    </div>
+
+    <!-- Grafik DHT11 -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div class="label" style="margin:0">Grafik Sensor DHT11</div>
+        <div style="display:flex;gap:16px;align-items:center;">
+          <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.58rem;color:var(--accent);">
+            <span style="width:20px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>Suhu (°C)
+          </span>
+          <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.58rem;color:#38bdf8;">
+            <span style="width:20px;height:2px;background:#38bdf8;display:inline-block;border-radius:2px;"></span>Kelembapan (%)
+          </span>
+          <button class="tbtn tbtn-clr" onclick="clearChart()" style="margin:0;">Reset</button>
+        </div>
+      </div>
+      <div style="position:relative;height:220px;">
+        <canvas id="dht-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Mode -->
+    <div class="mode-area">
+      <div id="mode-badge" class="mode-badge">
+        <span id="mode-dot"></span>
+        <span id="mode-text">MODE: —</span>
+      </div>
+      <span id="mode-hint" class="dim">Menunggu data...</span>
+    </div>
+
+    <!-- LEDs -->
+    <div class="grid-4">
+      <div class="card led-card"><div class="lorb" id="l1"></div><div><div class="lname">LED 1</div><div id="ls1" class="dim">Padam</div><div id="lb1" class="lbadge">GPIO 2</div></div></div>
+      <div class="card led-card"><div class="lorb" id="l2"></div><div><div class="lname">LED 2</div><div id="ls2" class="dim">Padam</div><div id="lb2" class="lbadge">GPIO 18</div></div></div>
+      <div class="card led-card"><div class="lorb" id="l3"></div><div><div class="lname">LED 3</div><div id="ls3" class="dim">Padam</div><div id="lb3" class="lbadge">GPIO 19</div></div></div>
+      <div class="card led-card"><div class="lorb" id="l4"></div><div><div class="lname">LED 4</div><div id="ls4" class="dim">Padam</div><div id="lb4" class="lbadge">GPIO 21</div></div></div>
+    </div>
+
+
+
+    <!-- Stats -->
+    <div class="grid-3">
+      <div class="card"><div class="label">Total Pesan</div><div class="stval" id="mc">0</div><div class="stunit">MESSAGES</div></div>
+      <div class="card"><div class="label">Uptime</div><div class="stval" id="up">00:00</div><div class="stunit">MM : SS</div></div>
+      <div class="card"><div class="label">Update Terakhir</div><div class="stval stval-sm" id="lu">—</div><div class="stunit">TIMESTAMP</div></div>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+      <div class="label">Log MQTT</div>
+      <div id="log">
+        <div class="le"><span class="lt">--:--:--</span><span class="lm muted">Tekan Connect untuk mulai menerima data.</span></div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+      <div class="tbl-toolbar">
+        <div class="label" style="margin:0">Riwayat Data Sensor</div>
+        <div class="tbl-actions">
+          <span id="sel-info" class="dim"></span>
+          <button class="tbtn tbtn-del" id="del-btn" onclick="deleteSelected()" disabled>Hapus Terpilih</button>
+          <button class="tbtn tbtn-csv" onclick="exportCSV()">Export CSV</button>
+          <button class="tbtn tbtn-clr" onclick="clearAll()">Hapus Semua</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="chk-all" onchange="toggleAll(this)"></th>
+              <th>#</th><th>Waktu</th><th>Suhu (°C)</th><th>Hum (%)</th><th>Cahaya</th><th>LED</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body">
+            <tr><td colspan="7" class="no-data">Belum ada data diterima.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <button id="btn" onclick="toggle()"><span id="btn-text">HUBUNGKAN KE MQTT</span></button>
+
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
