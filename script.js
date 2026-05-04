@@ -9,7 +9,8 @@ const CFG = {
   user:     'Dinar',
   pass:     'DinarSiot1',
   topic:    'iot/sensor',
-  tblInt:   2000,
+  topicCmd: 'iot/relay/cmd',   
+  tblInt:   1000,             
   maxRows:  50,
   maxChart: 30,
 };
@@ -19,6 +20,7 @@ let cl = null, conn = false, manualDisc = false;
 let lastStatus = '', lastData = null, lastTblTime = 0;
 let st = null, uptimer = null;
 let history = [], nextId = 1;
+let webRelayState = [false, false, false, false]; // state relay di web
 
 // ── View Navigation ───────────────────────────────────────────
 function goToDashboard() {
@@ -276,15 +278,25 @@ function onMsg(m) {
       const led = parseLed(d.led);
       addLog('MODE', 'MANUAL');
       addLog('LED', `L1:${+led[0]} L2:${+led[1]} L3:${+led[2]} L4:${+led[3]}`);
-      updLEDs(led, 'manual'); setSystemState('manual');
+      updLEDs(led, 'manual');
+      setSystemState('manual');
+      // Sync state web relay dengan kondisi hardware
+      webRelayState = [...led];
+      syncWebControlButtons(led);
     } else {
       if (suhu == null || hum == null) { addLog('ERR', 'Data tidak lengkap'); return; }
       addLog('SUHU', suhu.toFixed(1) + ' °C');
       addLog('HUM',  hum.toFixed(1)  + ' %');
       addLog('LDR',  cahaya || '—');
       setSystemState('auto', suhu); updLEDs(null, 'auto', suhu); cekAlert(suhu);
+      // Mode AUTO: nonaktifkan tombol web control
+      setWebControlEnabled(false, 'auto');
     }
-    if (Date.now() - lastTblTime >= CFG.tblInt) { addTableRow(now, suhu, hum, cahaya, d.led); lastTblTime = Date.now(); }
+
+    if (Date.now() - lastTblTime >= CFG.tblInt) {
+      addTableRow(now, suhu, hum, cahaya, d.led);
+      lastTblTime = Date.now();
+    }
   } catch(e) { addLog('ERR', 'Pesan error: ' + e.message); }
 }
 
@@ -295,6 +307,83 @@ function parseLed(led) {
   else if (typeof led === 'string' && /^[01]{4}$/.test(led)) led.split('').forEach((v, i) => s[i] = v === '1');
   else if (typeof led === 'number')                          for (let i = 0; i < 4; i++) s[i] = !!(led & (1 << i));
   return s;
+}
+
+// ── Web Relay Control (FITUR BARU) ────────────────────────────
+
+/**
+ * Kirim perintah toggle satu relay ke ESP32 via MQTT
+ * @param {number} relay - nomor relay 1-4
+ */
+function toggleRelayWeb(relay) {
+  if (!conn) { addLog('ERR', 'Belum terhubung ke MQTT'); return; }
+  const idx = relay - 1;
+  const newState = !webRelayState[idx];
+  webRelayState[idx] = newState;
+
+  const payload = JSON.stringify({ relay, state: newState });
+  const msg = new Paho.Message(payload);
+  msg.destinationName = CFG.topicCmd;
+  cl.send(msg);
+
+  addLog('WEB', `Relay ${relay} -> ${newState ? 'ON' : 'OFF'}`);
+  // Update tampilan tombol segera (optimistic UI)
+  updWebBtn(relay, newState);
+}
+
+/**
+ * Kirim perintah semua relay sekaligus
+ * @param {string} pattern - '0000' s/d '1111'
+ */
+function sendAllRelay(pattern) {
+  if (!conn) { addLog('ERR', 'Belum terhubung ke MQTT'); return; }
+  const msg = new Paho.Message(JSON.stringify({ led: pattern }));
+  msg.destinationName = CFG.topicCmd;
+  cl.send(msg);
+  webRelayState = pattern.split('').map(v => v === '1');
+  addLog('WEB', `ALL RELAY: ${pattern}`);
+  webRelayState.forEach((on, i) => updWebBtn(i + 1, on));
+}
+
+/**
+ * Update tampilan 1 tombol web control
+ */
+function updWebBtn(relay, on) {
+  const btn = g(`web-btn-${relay}`);
+  if (!btn) return;
+  btn.className = 'web-relay-btn ' + (on ? 'active' : '');
+  btn.querySelector('.web-btn-status').textContent = on ? 'ON' : 'OFF';
+}
+
+/**
+ * Sync semua tombol web sesuai state LED dari hardware
+ */
+function syncWebControlButtons(ledArr) {
+  ledArr.forEach((on, i) => {
+    webRelayState[i] = on;
+    updWebBtn(i + 1, on);
+  });
+  setWebControlEnabled(true, 'manual');
+}
+
+/**
+ * Enable/disable tombol web control
+ */
+function setWebControlEnabled(enabled, mode) {
+  const panel = g('web-control-panel');
+  if (!panel) return;
+  const hint = g('web-control-hint');
+  if (enabled) {
+    panel.classList.remove('disabled');
+    if (hint) hint.textContent = 'Mode MANUAL aktif — tombol web berfungsi';
+    if (hint) hint.className = 'dim web-hint-on';
+  } else {
+    panel.classList.add('disabled');
+    if (hint) hint.textContent = mode === 'auto'
+      ? 'Mode AUTO — relay dikontrol otomatis oleh suhu'
+      : 'Hubungkan MQTT untuk kontrol relay';
+    if (hint) hint.className = 'dim';
+  }
 }
 
 // ── UI Updates ────────────────────────────────────────────────
@@ -315,7 +404,7 @@ function updModeBadge(mode, suhu) {
   const isManual = mode === 'manual';
   g('mode-badge').className = 'mode-badge ' + (isManual ? 'manual' : 'auto');
   setText('mode-text', isManual ? 'MODE: MANUAL' : 'MODE: AUTO');
-  setText('mode-hint', isManual ? 'LED dikontrol via tombol fisik' : (suhu != null ? 'LED dari suhu ' + suhu.toFixed(1) + '°C' : 'LED dari suhu sensor'));
+  setText('mode-hint', isManual ? 'LED dikontrol via tombol fisik / web' : (suhu != null ? 'LED dari suhu ' + suhu.toFixed(1) + '°C' : 'LED dari suhu sensor'));
 }
 
 function setSystemState(state, suhu) {
@@ -325,12 +414,13 @@ function setSystemState(state, suhu) {
     setText('snote', 'STATUS: ' + (suhu <= 25 ? 'NORMAL' : suhu <= 30 ? 'SEDANG' : 'PANAS') + ' | ' + suhu.toFixed(1) + '°C');
   } else if (state === 'manual') {
     sv.textContent = 'MANUAL'; sv.className = 'big-text on';
-    setText('snote', 'Kontrol LED via tombol fisik');
+    setText('snote', 'Kontrol LED via tombol fisik / web');
   } else {
     sv.textContent = 'STANDBY'; sv.className = 'big-text';
     setText('snote', 'Menunggu data dari ESP32...');
     g('mode-badge').className = 'mode-badge';
     setText('mode-text', 'MODE: —'); setText('mode-hint', 'Menunggu data...');
+    setWebControlEnabled(false, 'disconnected');
   }
 }
 
@@ -365,7 +455,7 @@ function setBadge(cls, txt) { g('badge').className = 'badge ' + cls; setText('bt
 function addLog(type, msg) {
   const el = g('log');
   const t  = new Date().toLocaleTimeString('id-ID', { hour12: false });
-  const cls = msg.includes('TERANG') || msg.includes('AKTIF') ? 'on-txt'
+  const cls = msg.includes('TERANG') || msg.includes('AKTIF') || msg.includes('ON') ? 'on-txt'
             : msg.includes('GELAP')  || msg.includes('STANDBY') ? 'muted' : '';
   const d = Object.assign(document.createElement('div'), { className: 'le' });
   d.innerHTML = `<span class="lt">${t}</span> <span class="lk">[${type}]</span> <span class="lm ${cls}">${msg}</span>`;
