@@ -153,7 +153,7 @@
       <span id="mode-hint" class="dim">Menunggu data...</span>
     </div>
 
-    <!-- LEDs -->
+    <!-- LEDs (status hardware) -->
     <div class="grid-4">
       <div class="card led-card"><div class="lorb" id="l1"></div><div><div class="lname">LED 1</div><div id="ls1" class="dim">Padam</div><div id="lb1" class="lbadge">GPIO 2</div></div></div>
       <div class="card led-card"><div class="lorb" id="l2"></div><div><div class="lname">LED 2</div><div id="ls2" class="dim">Padam</div><div id="lb2" class="lbadge">GPIO 18</div></div></div>
@@ -161,7 +161,57 @@
       <div class="card led-card"><div class="lorb" id="l4"></div><div><div class="lname">LED 4</div><div id="ls4" class="dim">Padam</div><div id="lb4" class="lbadge">GPIO 21</div></div></div>
     </div>
 
+    <!-- ═══════════════════════════════════════════════════════
+         WEB RELAY CONTROL — FITUR BARU
+    ═══════════════════════════════════════════════════════ -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+        <div class="label" style="margin:0">🎛️ Kontrol Relay via Web</div>
+        <span id="web-control-hint" class="dim">Hubungkan MQTT untuk kontrol relay</span>
+      </div>
+      <div class="dim" style="font-size:.62rem;margin-bottom:14px;line-height:1.6;">
+        Hanya aktif saat ESP32 dalam <span style="color:var(--amber)">MODE MANUAL</span>.
+        Klik tombol di bawah untuk toggle relay langsung dari browser.
+      </div>
 
+      <div id="web-control-panel" class="web-ctrl-grid disabled">
+
+        <!-- Relay 1 -->
+        <button id="web-btn-1" class="web-relay-btn" onclick="toggleRelayWeb(1)">
+          <div class="web-btn-orb"></div>
+          <div class="web-btn-label">RELAY 1</div>
+          <div class="web-btn-gpio">GPIO 4</div>
+          <div class="web-btn-status">OFF</div>
+        </button>
+
+        <!-- Relay 2 -->
+        <button id="web-btn-2" class="web-relay-btn" onclick="toggleRelayWeb(2)">
+          <div class="web-btn-orb"></div>
+          <div class="web-btn-label">RELAY 2</div>
+          <div class="web-btn-gpio">GPIO 18</div>
+          <div class="web-btn-status">OFF</div>
+        </button>
+
+        <!-- Relay 3 -->
+        <button id="web-btn-3" class="web-relay-btn" onclick="toggleRelayWeb(3)">
+          <div class="web-btn-orb"></div>
+          <div class="web-btn-label">RELAY 3</div>
+          <div class="web-btn-gpio">GPIO 19</div>
+          <div class="web-btn-status">OFF</div>
+        </button>
+
+        <!-- Relay 4 -->
+        <button id="web-btn-4" class="web-relay-btn" onclick="toggleRelayWeb(4)">
+          <div class="web-btn-orb"></div>
+          <div class="web-btn-label">RELAY 4</div>
+          <div class="web-btn-gpio">GPIO 21</div>
+          <div class="web-btn-status">OFF</div>
+        </button>
+
+      </div>
+
+
+    </div>
 
     <!-- Stats -->
     <div class="grid-3">
