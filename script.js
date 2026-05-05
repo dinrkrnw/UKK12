@@ -9,8 +9,8 @@ const CFG = {
   user:     'Dinar',
   pass:     'DinarSiot1',
   topic:    'iot/sensor',
-  topicCmd: 'iot/relay/cmd',   
-  tblInt:   1000,             
+  topicCmd: 'iot/relay/cmd',   // ← REVISI: topik perintah ke ESP32
+  tblInt:   1000,              // ← REVISI: interval table update 1 detik
   maxRows:  50,
   maxChart: 30,
 };
@@ -45,60 +45,168 @@ function goToLogin() {
 let dhtChart = null;
 const chartLabels = [], chartSuhu = [], chartHum = [];
 
+/**
+ * Hitung batas sumbu Y berdasarkan data aktual.
+ * Memberikan padding 2 unit di atas dan bawah nilai min/max.
+ */
+function calcAxisRange(dataArr, fallbackMin, fallbackMax) {
+  if (!dataArr.length) return { min: fallbackMin, max: fallbackMax };
+  const min = Math.min(...dataArr);
+  const max = Math.max(...dataArr);
+  const pad = Math.max((max - min) * 0.2, 2); // padding minimal 2 unit
+  return {
+    min: Math.floor(min - pad),
+    max: Math.ceil(max + pad),
+  };
+}
+
 function initChart() {
   const ctx = g('dht-chart');
   if (!ctx || dhtChart) return;
+
   const makeAxis = (color, pos) => ({
     type: 'linear', position: pos,
-    ticks: { color, font: { family: "'Fira Code', monospace", size: 9 }, callback: v => v + (pos === 'left' ? '°C' : '%') },
+    ticks: {
+      color,
+      font: { family: "'Fira Code', monospace", size: 9 },
+      callback: v => v + (pos === 'left' ? '°C' : '%'),
+      maxTicksLimit: 6,
+    },
     grid:   pos === 'left' ? { color: 'rgba(14,165,233,.05)' } : { drawOnChartArea: false },
     border: { color: pos === 'left' ? 'rgba(14,165,233,.1)' : 'rgba(56,189,248,.1)' },
-    suggestedMin: pos === 'left' ? 15 : 0,
-    suggestedMax: pos === 'left' ? 45 : 100,
+    // Nilai awal saat belum ada data
+    suggestedMin: pos === 'left' ? 20 : 40,
+    suggestedMax: pos === 'left' ? 35 : 80,
   });
+
   dhtChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: chartLabels,
       datasets: [
-        { label: 'Suhu (°C)',      data: chartSuhu, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,.08)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#0ea5e9', tension: 0.4, fill: true, yAxisID: 'ySuhu' },
-        { label: 'Kelembapan (%)', data: chartHum,  borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.06)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#38bdf8', tension: 0.4, fill: true, yAxisID: 'yHum'  },
+        {
+          label: 'Suhu (°C)',
+          data: chartSuhu,
+          borderColor: '#0ea5e9',
+          backgroundColor: 'rgba(14,165,233,.08)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#0ea5e9',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'ySuhu',
+        },
+        {
+          label: 'Kelembapan (%)',
+          data: chartHum,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56,189,248,.06)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#38bdf8',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'yHum',
+        },
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
+      responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       animation: { duration: 300 },
       plugins: {
+        // Sembunyikan legenda bawaan Chart.js (sudah ada legenda manual di HTML)
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#0d1526', borderColor: 'rgba(14,165,233,.3)', borderWidth: 1,
-          titleColor: '#4d7fa8', bodyColor: '#bfdbfe', padding: 10,
+          backgroundColor: '#0d1526',
+          borderColor: 'rgba(14,165,233,.3)',
+          borderWidth: 1,
+          titleColor: '#4d7fa8',
+          bodyColor: '#bfdbfe',
+          padding: 10,
           titleFont: { family: "'Fira Code', monospace", size: 10 },
           bodyFont:  { family: "'Fira Code', monospace", size: 11 },
-          callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}` }
-        }
+          callbacks: {
+            // Tampilkan nilai dengan 1 desimal di tooltip hover
+            label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}`,
+          },
+        },
       },
       scales: {
-        x: { ticks: { color: '#4d7fa8', font: { family: "'Fira Code', monospace", size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(14,165,233,.05)' }, border: { color: 'rgba(14,165,233,.1)' } },
+        x: {
+          ticks: {
+            color: '#4d7fa8',
+            font: { family: "'Fira Code', monospace", size: 9 },
+            maxTicksLimit: 8, // Batasi label sumbu X agar tidak penuh
+            maxRotation: 0,   // Jangan rotasi label
+          },
+          grid: { color: 'rgba(14,165,233,.05)' },
+          border: { color: 'rgba(14,165,233,.1)' },
+        },
         ySuhu: makeAxis('#0ea5e9', 'left'),
         yHum:  makeAxis('#38bdf8', 'right'),
-      }
-    }
+      },
+    },
   });
 }
 
+/**
+ * Update badge nilai terkini di atas grafik (di luar canvas).
+ * Menggantikan tooltip yang muncul di pojok kiri grafik.
+ */
+function updChartBadge(suhu, hum) {
+  const vs = g('chart-val-suhu');
+  const vh = g('chart-val-hum');
+  const vt = g('chart-val-time');
+  if (vs) vs.textContent = suhu.toFixed(1);
+  if (vh) vh.textContent = hum.toFixed(1);
+  if (vt) vt.textContent = new Date().toLocaleTimeString('id-ID', { hour12: false });
+}
+
+/**
+ * Tambah titik data baru dan perbarui skala Y secara dinamis
+ * sesuai rentang data aktual yang masuk.
+ */
 function pushChart(suhu, hum) {
   if (!dhtChart) initChart();
+
   chartLabels.push(new Date().toLocaleTimeString('id-ID', { hour12: false }));
-  chartSuhu.push(suhu); chartHum.push(hum);
-  if (chartLabels.length > CFG.maxChart) { chartLabels.shift(); chartSuhu.shift(); chartHum.shift(); }
-  dhtChart.update();
+  chartSuhu.push(suhu);
+  chartHum.push(hum);
+
+  // Buang data terlama jika melebihi batas maxChart
+  if (chartLabels.length > CFG.maxChart) {
+    chartLabels.shift(); chartSuhu.shift(); chartHum.shift();
+  }
+
+  // Hitung ulang rentang sumbu Y berdasarkan data aktual
+  const rSuhu = calcAxisRange(chartSuhu, 20, 35);
+  const rHum  = calcAxisRange(chartHum, 40, 80);
+
+  dhtChart.options.scales.ySuhu.min = rSuhu.min;
+  dhtChart.options.scales.ySuhu.max = rSuhu.max;
+  dhtChart.options.scales.yHum.min  = Math.max(0, rHum.min);
+  dhtChart.options.scales.yHum.max  = Math.min(100, rHum.max);
+
+  dhtChart.update('none'); // 'none' = update tanpa animasi ulang agar smooth
+
+  // Update badge nilai terkini di atas grafik
+  updChartBadge(suhu, hum);
 }
 
 function clearChart() {
   chartLabels.length = chartSuhu.length = chartHum.length = 0;
-  if (dhtChart) dhtChart.update();
+  if (dhtChart) {
+    // Reset skala ke default saat data dikosongkan
+    dhtChart.options.scales.ySuhu.min = 20;
+    dhtChart.options.scales.ySuhu.max = 35;
+    dhtChart.options.scales.yHum.min  = 40;
+    dhtChart.options.scales.yHum.max  = 80;
+    dhtChart.update();
+  }
 }
 
 // ── Persistence ───────────────────────────────────────────────
