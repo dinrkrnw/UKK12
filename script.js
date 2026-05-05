@@ -12,7 +12,7 @@ const CFG = {
   topicCmd: 'iot/relay/cmd',   // ← REVISI: topik perintah ke ESP32
   tblInt:   1000,              // ← REVISI: interval table update 1 detik
   maxRows:  50,
-  maxChart: 30,
+  maxChart: 10,
 };
 
 // ── State ─────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ function initChart() {
           ticks: {
             color: '#4d7fa8',
             font: { family: "'Fira Code', monospace", size: 9 },
-            maxTicksLimit: 8, // Batasi label sumbu X agar tidak penuh
+            maxTicksLimit: 10, // Tampilkan semua label untuk 10 data
             maxRotation: 0,   // Jangan rotasi label
           },
           grid: { color: 'rgba(14,165,233,.05)' },
